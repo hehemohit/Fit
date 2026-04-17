@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="true_black">#000000</color>
+    <color name="electric_blue">#00B0FF</color>
+    <color name="dark_charcoal">#121212</color>
+    <color name="muted_blue_grey">#90A4AE</color>
+    <color name="stroke_blue_grey">#334155</color>
+    <color name="glow_blue">#3300B0FF</color>
+    <color name="bottom_nav_inactive">#88FFFFFF</color>
+</resources>
