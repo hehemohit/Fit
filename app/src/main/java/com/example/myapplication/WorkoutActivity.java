@@ -31,8 +31,10 @@ public class WorkoutActivity extends AppCompatActivity {
     private static final String TAG = "WorkoutActivity";
 
     private LinearLayout workoutList;
-    // Background animation removed for Neo-Brutalism theme
+    private TextView tvLazyHuman;
+    private View workoutScrollView;
     private BottomNavigationView bottomNavigation;
+    private java.util.Random random = new java.util.Random();
 
     private MiBandService miBandService;
     private boolean isBound = false;
@@ -82,7 +84,11 @@ public class WorkoutActivity extends AppCompatActivity {
                 ws.totalSteps = steps;
                 ws.totalCalories = calories;
 
-                runOnUiThread(() -> addWorkoutCard(ws));
+                runOnUiThread(() -> {
+                    tvLazyHuman.setVisibility(View.GONE);
+                    workoutScrollView.setVisibility(View.VISIBLE);
+                    addWorkoutCard(ws);
+                });
             }
         }
     };
@@ -93,8 +99,15 @@ public class WorkoutActivity extends AppCompatActivity {
         setContentView(R.layout.activity_workout);
 
         workoutList = findViewById(R.id.workoutList);
+        tvLazyHuman = findViewById(R.id.tvLazyHuman);
+        workoutScrollView = findViewById(R.id.workoutScrollView);
         // Background animation removed for Neo-Brutalism theme
         bottomNavigation = findViewById(R.id.bottomNavigation);
+
+        tvLazyHuman.setOnClickListener(v -> moveLazyHuman());
+
+        // Initial check
+        updateWorkoutVisibility();
 
         // Set the current tab to workout
         bottomNavigation.setSelectedItemId(R.id.nav_workout);
@@ -126,6 +139,56 @@ public class WorkoutActivity extends AppCompatActivity {
         }
 
         // Only real workout data from the broadcast receiver will be added here.
+    }
+
+    private void updateWorkoutVisibility() {
+        if (workoutList.getChildCount() == 0) {
+            tvLazyHuman.setVisibility(View.VISIBLE);
+            workoutScrollView.setVisibility(View.GONE);
+        } else {
+            tvLazyHuman.setVisibility(View.GONE);
+            workoutScrollView.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void moveLazyHuman() {
+        // Find the parent view to know its size
+        View parent = (View) tvLazyHuman.getParent();
+        if (parent == null) return;
+
+        int parentWidth = parent.getWidth();
+        int parentHeight = parent.getHeight();
+        int itemWidth = tvLazyHuman.getWidth();
+        int itemHeight = tvLazyHuman.getHeight();
+
+        if (parentWidth <= itemWidth || parentHeight <= itemHeight) return;
+
+        // Calculate random position within bounds
+        int maxX = parentWidth - itemWidth;
+        int maxY = parentHeight - itemHeight;
+
+        // For Neo-Brutalism, let's also give it a random rotation
+        float randomX = random.nextInt(maxX);
+        float randomY = random.nextInt(maxY);
+        float randomRotation = random.nextFloat() * 20 - 10; // -10 to 10 degrees
+
+        // Remove constraints so translation works freely relative to top/left
+        // Or just use translations if it was centered.
+        // Since it's in a ConstraintLayout and centered, translations are relative to center.
+        // It's easier to just set translationX/Y from the center point.
+        
+        float centerX = parentWidth / 2f;
+        float centerY = parentHeight / 2f;
+        
+        float targetTranslationX = randomX - (centerX - itemWidth/2f);
+        float targetTranslationY = randomY - (centerY - itemHeight/2f);
+
+        tvLazyHuman.animate()
+                .translationX(targetTranslationX)
+                .translationY(targetTranslationY)
+                .rotation(randomRotation)
+                .setDuration(300)
+                .start();
     }
 
     private void addWorkoutCard(WorkoutSession ws) {
