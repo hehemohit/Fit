@@ -32,6 +32,7 @@ public class MiBandService extends Service {
     public static final String ACTION_STEPS_DATA       = "com.example.myapplication.STEPS_DATA";
     public static final String ACTION_HEART_RATE_DATA  = "com.example.myapplication.HEART_RATE_DATA";
     public static final String ACTION_SLEEP_DATA       = "com.example.myapplication.SLEEP_DATA";
+    public static final String ACTION_WORKOUT_DATA     = "com.example.myapplication.WORKOUT_DATA";
     
     public static final String EXTRA_STATE            = "state";
     public static final String EXTRA_STEPS            = "steps";
@@ -41,6 +42,11 @@ public class MiBandService extends Service {
     public static final String EXTRA_SLEEP_TOTAL_MIN  = "sleep_total_min";
     public static final String EXTRA_SLEEP_DEEP_MIN   = "sleep_deep_min";
     public static final String EXTRA_SLEEP_LIGHT_MIN  = "sleep_light_min";
+    public static final String EXTRA_WORKOUT_TYPE     = "workout_type";
+    public static final String EXTRA_WORKOUT_DURATION = "workout_duration";
+    public static final String EXTRA_WORKOUT_AVG_HR   = "workout_avg_hr";
+    public static final String EXTRA_WORKOUT_STEPS    = "workout_steps";
+    public static final String EXTRA_WORKOUT_CALORIES = "workout_calories";
     
     public static final String STATE_CONNECTED        = "CONNECTED";
     public static final String STATE_DISCONNECTED     = "DISCONNECTED";
@@ -58,30 +64,14 @@ public class MiBandService extends Service {
     // Activity type 0x01 = light sleep, 0x04 = deep sleep.
     private int sleepLightMinutes = 0;
     private int sleepDeepMinutes  = 0;
-    private boolean isFetchingSleep = false;
+    private boolean isFetchingActivity = false;
 
-    // ─── Hybrid Polling State ───────────────────────────────────────────
-    // Foreground: poll every 3 s so the dashboard feels live.
-    // Background: poll every 15 min so the BLE radio stays dark and battery is preserved.
-    private static final long POLL_INTERVAL_FOREGROUND_MS = 3_000L;          //  3 seconds
-    private static final long POLL_INTERVAL_BACKGROUND_MS = 15 * 60 * 1000L; // 15 minutes
-
-    private boolean isPolling       = false;
-    private boolean isForeground    = false;
-    private long    currentInterval = POLL_INTERVAL_BACKGROUND_MS;
-
-    private final Runnable stepsPollingRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (bluetoothGatt != null) {
-                requestSteps();
-                Log.v(TAG, "Poll: requestSteps() • interval=" + (currentInterval / 1000) + "s");
-            }
-            if (isPolling) {
-                handler.postDelayed(this, currentInterval);
-            }
-        }
-    };
+    // Workout extraction state
+    private int activeWorkoutType = 0; // 0=none, 0x11=treadmill, 0x12=exercise
+    private int activeWorkoutDuration = 0;
+    private int activeWorkoutSteps = 0;
+    private int activeWorkoutHrSum = 0;
+    private int activeWorkoutHrCount = 0;
 
     // Binder for MainActivity / DashboardActivity to bind to this service
     private final IBinder binder = new LocalBinder();
@@ -95,49 +85,6 @@ public class MiBandService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return binder;
-    }
-
-    // ─── Polling API ──────────────────────────────────────────────────────────────
-
-    /**
-     * Called by the Dashboard when it moves to foreground or background.
-     *
-     * Foreground (visible): 3-second interval — user sees steps climb in real time.
-     * Background (paused):  15-minute interval — BLE radio stays off ~99% of the time,
-     *                        recovering the Mi Band's full 20-day battery life.
-     *
-     * The Runnable reschedules itself inside the Service so polling survives
-     * even after the Activity is paused or the screen is off.
-     */
-    public void setForegroundPolling(boolean foreground) {
-        long newInterval = foreground ? POLL_INTERVAL_FOREGROUND_MS : POLL_INTERVAL_BACKGROUND_MS;
-        if (newInterval == currentInterval && isPolling) return; // nothing to change
-
-        isForeground    = foreground;
-        currentInterval = newInterval;
-        Log.d(TAG, "Polling mode: " + (foreground ? "FOREGROUND (3s)" : "BACKGROUND (15min)"));
-
-        if (isPolling) {
-            // Cancel the pending call and reschedule at the new rate immediately
-            handler.removeCallbacks(stepsPollingRunnable);
-            handler.postDelayed(stepsPollingRunnable, currentInterval);
-        }
-    }
-
-    /** Starts the self-rescheduling polling loop. Called once after authentication. */
-    private void startPolling() {
-        if (isPolling) return;
-        isPolling = true;
-        // First read fires immediately so the dashboard isn't blank on launch
-        handler.post(stepsPollingRunnable);
-        Log.d(TAG, "Polling STARTED (" + (currentInterval / 1000) + "s interval)");
-    }
-
-    /** Stops the polling loop entirely (called on disconnect or service destroy). */
-    public void stopPolling() {
-        isPolling = false;
-        handler.removeCallbacks(stepsPollingRunnable);
-        Log.d(TAG, "Polling STOPPED");
     }
 
     // ─── Public API ─────────────────────────────────────────────────────────────
@@ -267,7 +214,12 @@ public class MiBandService extends Service {
             // Reset accumulators before a fresh fetch
             sleepLightMinutes = 0;
             sleepDeepMinutes  = 0;
-            isFetchingSleep   = true;
+            activeWorkoutType = 0;
+            activeWorkoutDuration = 0;
+            activeWorkoutSteps = 0;
+            activeWorkoutHrSum = 0;
+            activeWorkoutHrCount = 0;
+            isFetchingActivity   = true;
 
             // Step 1 — enable Android-side + band-side notifications on Activity Data
             bluetoothGatt.setCharacteristicNotification(dataChar, true);
@@ -419,7 +371,6 @@ public class MiBandService extends Service {
 
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.d(TAG, "Disconnected from Mi Band. Status code: " + status);
-                stopPolling(); // halt the polling loop when BLE drops
                 broadcast(ACTION_CONNECTION_STATE, STATE_DISCONNECTED);
                 authCharacteristic = null;
 
@@ -549,25 +500,62 @@ public class MiBandService extends Service {
             // Packet layout: [category, intensity, steps, heartrate]
             //   category: 0x00 = awake/not worn, 0x01 = light sleep, 0x04 = deep sleep
             //             0x80 = activity start marker, 0xFF = end-of-data marker
-            if (isFetchingSleep && characteristic.getUuid().toString().equals(MiBandConstants.ACTIVITY_DATA_CHAR)) {
+            if (isFetchingActivity && characteristic.getUuid().toString().equals(MiBandConstants.ACTIVITY_DATA_CHAR)) {
                 byte[] data = characteristic.getValue();
                 if (data == null) return;
 
-                // The band can send a multi-minute burst in one notification
-                // Each minute record is exactly 4 bytes; iterate through all of them.
                 for (int i = 0; i + 3 < data.length; i += 4) {
                     int category = data[i] & 0xFF;
+                    int intensity = data[i + 1] & 0xFF;
+                    int stepsPerMin = data[i + 2] & 0xFF;
+                    int hrPerMin = data[i + 3] & 0xFF;
 
                     if (category == 0xFF) {
                         // End-of-transfer marker — broadcast final totals
-                        Log.d(TAG, "Sleep fetch complete. Light=" + sleepLightMinutes + "m Deep=" + sleepDeepMinutes + "m");
+                        Log.d(TAG, "Activity fetch complete. Light=" + sleepLightMinutes + "m Deep=" + sleepDeepMinutes + "m");
                         broadcastSleepData();
-                        isFetchingSleep = false;
+
+                        // Flush any pending workout
+                        if (activeWorkoutType > 0 && activeWorkoutDuration > 1) {
+                            broadcastWorkout(activeWorkoutType, activeWorkoutDuration, activeWorkoutSteps, activeWorkoutHrSum, activeWorkoutHrCount);
+                        }
+
+                        isFetchingActivity = false;
                         return;
-                    } else if (category == 0x01) { // light sleep
-                        sleepLightMinutes++;
-                    } else if (category == 0x04) { // deep sleep
-                        sleepDeepMinutes++;
+                    } 
+                    
+                    // Sleep tracking
+                    if (category == 0x01) { sleepLightMinutes++; } 
+                    else if (category == 0x04) { sleepDeepMinutes++; }
+
+                    // Workout tracking (0x11 often Treadmill, 0x12 often Free Exercise, 0x1A etc.)
+                    // Sometimes Mi Band uses a generic category (e.g. 0x10) and high intensity denotes exercise.
+                    boolean isWorkoutCategory = (category == 0x11 || category == 0x12 || category == 0x1A || category == 0x10);
+                    
+                    if (isWorkoutCategory) {
+                        if (activeWorkoutType == 0) {
+                            activeWorkoutType = category; // Start new workout
+                        }
+                        // Accumulate
+                        activeWorkoutDuration++;
+                        activeWorkoutSteps += stepsPerMin;
+                        if (hrPerMin > 0) {
+                            activeWorkoutHrSum += hrPerMin;
+                            activeWorkoutHrCount++;
+                        }
+                    } else {
+                        // Sequence broken, finish previous workout if valid (> 3 mins)
+                        if (activeWorkoutType > 0) {
+                            if (activeWorkoutDuration > 3) {
+                                broadcastWorkout(activeWorkoutType, activeWorkoutDuration, activeWorkoutSteps, activeWorkoutHrSum, activeWorkoutHrCount);
+                            }
+                            // Reset for next potential workout
+                            activeWorkoutType = 0;
+                            activeWorkoutDuration = 0;
+                            activeWorkoutSteps = 0;
+                            activeWorkoutHrSum = 0;
+                            activeWorkoutHrCount = 0;
+                        }
                     }
                 }
                 return;
@@ -614,11 +602,9 @@ public class MiBandService extends Service {
 
                 // Step C: Fetch last night's sleep data (delayed so HR setup has settled)
                 handler.postDelayed(() -> requestSleepData(), 2500);
-
-                // Step D: Start the hybrid polling loop in background mode by default.
-                // DashboardActivity will call setForegroundPolling(true) via onResume
-                // as soon as it binds, switching it to 3-second real-time updates.
-                startPolling();
+                
+                // Step D: Request initial steps
+                handler.postDelayed(() -> requestSteps(), 3500);
 
                 broadcast(ACTION_AUTH_COMPLETE, STATE_AUTHENTICATED);
             }
@@ -743,5 +729,24 @@ public class MiBandService extends Service {
         intent.putExtra(EXTRA_SLEEP_DEEP_MIN,   sleepDeepMinutes);
         sendBroadcast(intent);
         Log.d(TAG, "Sleep broadcast: total=" + totalMin + "min light=" + sleepLightMinutes + " deep=" + sleepDeepMinutes);
+    }
+
+    private void broadcastWorkout(int category, int duration, int steps, int hrSum, int hrCount) {
+        String type = "Exercise";
+        if (category == 0x11) type = "Treadmill";
+        
+        int avgHr = hrCount > 0 ? (hrSum / hrCount) : 0;
+        int calories = (int) (steps * 0.05); // Rough caloric estimate for active workout
+
+        Intent intent = new Intent(ACTION_WORKOUT_DATA);
+        intent.setPackage(getPackageName());
+        intent.putExtra(EXTRA_WORKOUT_TYPE, type);
+        intent.putExtra(EXTRA_WORKOUT_DURATION, duration);
+        intent.putExtra(EXTRA_WORKOUT_AVG_HR, avgHr);
+        intent.putExtra(EXTRA_WORKOUT_STEPS, steps);
+        intent.putExtra(EXTRA_WORKOUT_CALORIES, calories);
+        sendBroadcast(intent);
+        
+        Log.d(TAG, "Workout broadcast: " + type + " duration=" + duration + " steps=" + steps + " avgHR=" + avgHr);
     }
 }

@@ -21,6 +21,9 @@
         <activity
             android:name=".DashboardActivity"
             android:exported="false" />
+        <activity
+            android:name=".WorkoutActivity"
+            android:exported="false" />
 
         <activity
             android:name=".MainActivity"

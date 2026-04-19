@@ -1,31 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="16dp">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Status: Disconnected"
-        android:textSize="18sp"
-        android:layout_marginBottom="24dp" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp"
+        android:background="@color/neo_bg">
 
-    <Button
-        android:id="@+id/btnScanConnect"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Scan and Connect"
-        android:layout_marginBottom="16dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MI BAND"
+            android:textSize="48sp"
+            android:textStyle="bold"
+            android:textColor="@color/neo_black"
+            android:layout_marginBottom="8dp" />
 
-    <Button
-        android:id="@+id/btnVibrate"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Vibrate Mi Band" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CONTROL CENTER"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/neo_black"
+            android:layout_marginBottom="48dp" />
 
-</LinearLayout>
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Status: Disconnected"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/neo_black"
+            android:padding="16dp"
+            android:background="@color/neo_white"
+            android:gravity="center"
+            android:layout_marginBottom="32dp"
+            android:drawablePadding="8dp" />
+
+        <Button
+            android:id="@+id/btnScanConnect"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="SCAN &amp; CONNECT"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/neo_black"
+            android:background="@drawable/neo_button_bg"
+            app:backgroundTint="@null"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btnVibrate"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="VIBRATE BAND"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/neo_black"
+            android:background="@drawable/neo_button_bg"
+            app:backgroundTint="@color/neo_cyan"
+            android:layout_marginBottom="16dp" />
+
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

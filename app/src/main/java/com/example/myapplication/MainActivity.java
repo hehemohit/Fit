@@ -25,6 +25,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.myapplication.bluetooth.MiBandService;
+// Neural Network Background removed for Neo-Brutalism theme
+import android.view.MotionEvent;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -34,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvStatus;
     private Button btnScanConnect;
     private Button btnVibrate;
+    // Background animation removed for Neo-Brutalism theme
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bluetoothLeScanner;
@@ -103,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
         tvStatus       = findViewById(R.id.tvStatus);
         btnScanConnect = findViewById(R.id.btnScanConnect);
         btnVibrate     = findViewById(R.id.btnVibrate);
+        // Background animation removed for Neo-Brutalism theme
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter != null) {
@@ -138,6 +142,8 @@ public class MainActivity extends AppCompatActivity {
             registerReceiver(stateReceiver, filter);
         }
     }
+
+    // Background touch logic removed
 
     @Override
     protected void onDestroy() {
